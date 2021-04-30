@@ -1,0 +1,9 @@
+Some lines aren't repeated.
+This file contains repeats.
+Star Trek is cool!
+This file contains repeats.
+This file contains repeats.
+Some lines get repeated.
+Blah blah blah...
+Some lines get repeated.
+This file contains repeats.
