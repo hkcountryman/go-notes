@@ -136,7 +136,6 @@ func dup3() {
 // bufio.Scanner, ioutil.ReadFile(), and ioutil.WriteFile() use the Read() and Write() methods of
 // *os.File, but are easier to use than those lower-level routines.
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
 // Generates GIF animations of random Lissajous figures:
 var palette = []color.Color{color.White, color.Black}
 
@@ -290,7 +289,55 @@ func lissajousServer() {
 	log.Fatal(http.ListenAndServe("localhost:8100", nil))
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
+// Switch statements compare result of function called (e.g., coinflip()) to each case:
+//	switch coinflip() {
+//		case "heads":
+//			heads++
+//		case "tails":
+//			tails++
+//		default:
+//			fmt.Println("Landed on edge!")
+//	}
+// Alternatively, "tagless" switch statements don't need an operand; can just list boolean cases:
+//	func Signum(x int) int {
+//		switch {
+//		case x > 0:
+//			return +1
+//		default:
+//			return 0
+//		case x < 0:
+//			return -1
+//		}
+//	}
+// Essentially, equivalent to "switch true {...}".
+// Like for and if statements, switch may include an optional simple statement: short variable
+// declaration, increment or assignment statement, or a function call.
+// Can use break and continue statements to modify flow control: break causes control to resume at
+// the next statement following the innermost for, switch or select statement; continue causes the
+// innermost for loop to skip current iteration and go on to next. We can label statements and refer
+// to them by name with break or continue, or even use goto statements, though that's not really
+// intended for use by humans.
+
+// Name an existing type with a type declaration:
+//	type Point struct {
+//		X, Y int
+//	}
+
+// Pointers are explicitly visible: the & operator yields the address of a variable and the *
+// operator retrieves the variable that the pointer refers to, but there is no pointer arithmetic.
+
+// A method is a function associated with a named type; may be attached to almost any named type.
+// Interfaces are abstract types that define methods for concrete types.
+
+// Index of standard library packages available at https://golang.org/pkg and community packages at
+// https://godoc.org. Use go doc tool to see documentation, e.g.,
+//	$ go doc http.ListenAndServe
+//	package http // import "net/http"
+//
+//	func ListenAndServe(addr string, handler Handler) error
+//		ListenAndServe listens on the TCP network address addr and then
+//		calls Serve with handler to handle requests on incoming connections.
+//	...
 
 // A partial driver to demonstrate the above examples
 func main() {

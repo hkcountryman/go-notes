@@ -194,8 +194,6 @@ func lissajousServer() {
 	log.Fatal(http.ListenAndServe("localhost:8010", nil))
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 func main() {
 	/*fmt.Println()
 	ex9("http://gopl.io")
