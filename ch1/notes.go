@@ -3,12 +3,22 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
+	"io"
 	"io/ioutil"
+	"log"
+	"math"
+	"math/rand"
+	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
 
-// Prints command line arguments
+// Prints command line arguments.
 func echo1() {
 	var s, sep string
 	// for initialization; condition; post { ... }
@@ -19,7 +29,7 @@ func echo1() {
 	fmt.Println(s)
 }
 
-// Prints command line arguments
+// Prints command line arguments.
 func echo2() {
 	s, sep := "", ""
 	// range returns index, value (index is anonymous)
@@ -36,12 +46,12 @@ func echo2() {
 //		var s = ""			(rarely used except to declare multiple variables)
 //		var s string = ""	(explicit about type)
 
-// Prints command line arguments; less garbage collecting than echo1() or echo2()
+// Prints command line arguments; less garbage collecting than echo1() or echo2().
 func echo3() {
 	fmt.Println(strings.Join(os.Args[1:], " "))
 }
 
-// Prints the text of each line that appears more than once in the standard input, preceded by count
+// Prints the text of each line that appears more than once in the standard input, preceded by count.
 func dup1() {
 	counts := make(map[string]int) // key is any type that can be compared with ==; value any type
 	input := bufio.NewScanner(os.Stdin)
@@ -68,7 +78,7 @@ func dup1() {
 //		%%				literal percent sign (no operand)
 
 // Prints the count and text of lines that appear more than once in the input, either from stdin or
-// from a list of named files
+// from a list of named files.
 func dup2() {
 	counts := make(map[string]int)
 	files := os.Args[1:]
@@ -93,7 +103,7 @@ func dup2() {
 	}
 }
 
-// Main functionality of dup2()
+// Main functionality of dup2().
 func countLines(f *os.File, counts map[string]int) {
 	input := bufio.NewScanner(f)
 	for input.Scan() { // (ignoring potential errors from input.Err())
@@ -102,7 +112,7 @@ func countLines(f *os.File, counts map[string]int) {
 }
 
 // Prints the count and text of lines that appear more than once in the named input files, which are
-// processed all at once
+// processed all at once.
 func dup3() {
 	counts := make(map[string]int)
 	for _, filename := range os.Args[1:] {
@@ -127,14 +137,173 @@ func dup3() {
 // *os.File, but are easier to use than those lower-level routines.
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// Generates GIF animations of random Lissajous figures:
+var palette = []color.Color{color.White, color.Black}
+
+const (
+	whiteIndex = 0 // first color in palette
+	blackIndex = 1 // next color in palette
+)
+
+// This contains errors, don't know why!
+func lissajous(out io.Writer) {
+	const (
+		cycles  = 5     // number of complete x oscillator revolutions
+		res     = 0.001 // angular resolution
+		size    = 100   // image canvas covers [-size..+size]
+		nframes = 64    // number of animation frames
+		delay   = 8     // delay between frames in 10ms units
+	)
+	freq := rand.Float64() * 3.0 // relative frequency of y oscillator
+	anim := gif.GIF{LoopCount: nframes}
+	phase := 0.0 // phase difference
+	for i := 0; i < nframes; i++ {
+		rect := image.Rect(0, 0, 2*size+1, 2*size+1)
+		img := image.NewPaletted(rect, palette)
+		for t := 0.0; t < cycles*2*math.Pi; t += res {
+			x := math.Sin(t)
+			y := math.Sin(t*freq + phase)
+			img.SetColorIndex(size+int(x*size+0.5), size+int(y*size+0.5), blackIndex)
+		}
+		phase += 0.1
+		anim.Delay = append(anim.Delay, delay)
+		anim.Image = append(anim.Image, img)
+	}
+	gif.EncodeAll(out, &anim) // NOTE: ignoring encoding errors
+}
+
+// Fetches the content of a specified URL and prints it as uninterpreted text.
+func fetch1(url string) {
+	resp, err := http.Get(url)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
+		os.Exit(1)
+	}
+	b, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fetch: reading %s: %v\n", url, err)
+		os.Exit(1)
+	}
+	fmt.Printf("%s", b)
+}
+
+// Fetches URLs in parallel and reports their times and sizes (given os.Args[1:]).
+func fetchall(args []string) {
+	start := time.Now()
+	ch := make(chan string)
+	for _, url := range args {
+		go fetch2(url, ch) // start a goroutine
+	}
+	for range args {
+		fmt.Println(<-ch) // receive from channel ch
+	}
+	fmt.Printf("%.2fs elapsed\n", time.Since(start).Seconds())
+}
+
+// Helper function for fetchall.
+func fetch2(url string, ch chan<- string) {
+	start := time.Now()
+	resp, err := http.Get(url)
+	if err != nil {
+		ch <- fmt.Sprint(err) // send to channel ch
+		return
+	}
+	nbytes, err := io.Copy(ioutil.Discard, resp.Body)
+	resp.Body.Close() // don't leak resources
+	if err != nil {
+		ch <- fmt.Sprintf("while reading %s: %v", url, err)
+		return
+	}
+	secs := time.Since(start).Seconds()
+	ch <- fmt.Sprintf("%.2fs	%7d		%s", secs, nbytes, url)
+}
+
+// Goroutine: concurrent function execution
+// Channel: communication mechanism that allows one goroutine to pass values of a specified type to
+// another goroutine
+// main() runs in a goroutine and the "go" statement creates additional goroutines
+
+// Minimal "echo" server.
+func server1() {
+	// connects a handler function to incoming URLs whose path begins with / (all URLs)
+	http.HandleFunc("/", handler1) // each request calls handler
+	log.Fatal(http.ListenAndServe("localhost:8000", nil))
+}
+
+// Handler echoes the Path component of the requested URL.
+func handler1(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "URL.Path = %q\n", r.URL.Path)
+}
+
+// Add some features to the server...
+var mu sync.Mutex
+var count int
+
+// Minimal "echo" and counter server.
+func server2() {
+	http.HandleFunc("/", handler2)
+	http.HandleFunc("/count", counter)
+	log.Fatal(http.ListenAndServe("localhost:8090", nil))
+}
+
+// Echoes the Path component of the requested URL.
+func handler2(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	count++
+	mu.Unlock()
+	fmt.Fprintf(w, "URL.Path = %q\n", r.URL.Path)
+}
+
+// Echoes the number of calls so far
+func counter(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	fmt.Fprintf(w, "Count %d\n", count)
+	mu.Unlock()
+}
+
+// The above server is running the handler for each incoming request in separate goroutines, but it
+// doesn't do this for requests to update count, which may lead to a race condition. mu.Lock() and
+// mu.Unlock() ensure that at most one goroutine accesses a given variable at a time.
+
+// Handler could also echo the HTTP request for debugging:
+func handler3(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "%s %s %s\n", r.Method, r.URL, r.Proto)
+	for k, v := range r.Header {
+		fmt.Fprintf(w, "Header[%q] = %q\n", k, v)
+	}
+	fmt.Fprintf(w, "Host = %q\n", r.Host)
+	fmt.Fprintf(w, "RemoteAddr = %q\n", r.RemoteAddr)
+	if err := r.ParseForm(); err != nil { // shorter and reduces scope of err
+		log.Print(err)
+	}
+	for k, v := range r.Form {
+		fmt.Fprintf(w, "Form[%q] = %q\n", k, v)
+	}
+}
+
+// Puts our Lissajous GIF onto a server.
+func lissajousServer() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		lissajous(w)
+	})
+	log.Fatal(http.ListenAndServe("localhost:8100", nil))
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // A partial driver to demonstrate the above examples
 func main() {
-	fmt.Println("\nFirst implementation of echo:")
+	/*fmt.Println("\nFirst implementation of echo:")
 	echo1()
 	fmt.Println("\nSecond implementation of echo:")
 	echo2()
 	fmt.Println("\nThird implementation of echo:")
 	echo3()
+	//lissajous(os.Stdout) // go build ch1/notes.go > ch1/out.gif
+	fetch1("http://gopl.io")
 	fmt.Println()
+	fetch1("http://bad.gopl.io")*/
+	//fetchall(os.Args[1:]) // go run ch1/notes.go https://golang.org http://gopl.io https://godoc.org
+	lissajousServer() // go run notes.go &
 }
